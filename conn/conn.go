@@ -82,9 +82,13 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 		}
 	})
 
-	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
-		fmt.Printf("[*] P2P State changed: %s\n", s.String())
-		if s == webrtc.PeerConnectionStateFailed || s == webrtc.PeerConnectionStateClosed {
+	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		fmt.Printf("[*] P2P State changed: %s\n", state.String())
+		if state == webrtc.PeerConnectionStateConnected {
+			ws.Close()
+			return
+		}
+		if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
 			fmt.Println("Connection lost. Exiting.")
 			os.Exit(0)
 		}
@@ -94,7 +98,7 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 		for {
 			_, msgBytes, err := ws.ReadMessage()
 			if err != nil {
-				log.Fatalf("Websocket disconnected prematurely: %v", err)
+				return
 			}
 
 			var raw map[string]any

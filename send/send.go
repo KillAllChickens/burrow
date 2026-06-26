@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pion/webrtc/v3"
@@ -18,6 +20,7 @@ const (
 	MaxBufferThreshold = 4 * 1024 * 1024
 	LowBufferThreshold = 2 * 1024 * 1024
 	MaxSafeChunkSize   = 65535
+	resumeTimeout      = 5 * time.Second
 )
 
 var ChunkSize int
@@ -58,14 +61,29 @@ func HandleFileSend(dc *webrtc.DataChannel, filePath string) {
 		return
 	}
 
-	resumeChan := make(chan struct{}, 1)
-	dc.SetBufferedAmountLowThreshold(LowBufferThreshold)
-	dc.OnBufferedAmountLow(func() {
-		select {
-		case resumeChan <- struct{}{}:
-		default:
+	resumePos := make(chan int64, 1)
+	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
+		if msg.IsString {
+			text := string(msg.Data)
+			if strings.HasPrefix(text, "RESUME ") {
+				pos, _ := strconv.ParseInt(text[7:], 10, 64)
+				resumePos <- pos
+			}
 		}
 	})
+
+	var pos int64
+	select {
+	case pos = <-resumePos:
+	case <-time.After(resumeTimeout):
+	}
+
+	if pos > 0 {
+		if _, err := file.Seek(pos, io.SeekStart); err != nil {
+			log.Printf("[!] Failed to seek to resume position %d: %v", pos, err)
+			pos = 0
+		}
+	}
 
 	bar := progressbar.NewOptions64(meta.Size,
 		progressbar.OptionSetDescription("Sending"),
@@ -75,6 +93,18 @@ func HandleFileSend(dc *webrtc.DataChannel, filePath string) {
 		progressbar.OptionSetPredictTime(true),
 		progressbar.OptionSetRenderBlankState(true),
 	)
+	if pos > 0 {
+		bar.Add(int(pos))
+	}
+
+	resumeChan := make(chan struct{}, 1)
+	dc.SetBufferedAmountLowThreshold(LowBufferThreshold)
+	dc.OnBufferedAmountLow(func() {
+		select {
+		case resumeChan <- struct{}{}:
+		default:
+		}
+	})
 
 	buffer := make([]byte, ChunkSize)
 	startTime := time.Now()
@@ -104,4 +134,5 @@ func HandleFileSend(dc *webrtc.DataChannel, filePath string) {
 		float64(totalSent)/(1024*1024), duration, (float64(totalSent)/(1024*1024))/duration.Seconds())
 
 	dc.SendText("EOF")
+	os.Exit(0)
 }
