@@ -14,12 +14,6 @@ import (
 	"resty.dev/v3"
 )
 
-// var (
-//
-//	apiURL = fmt.Sprintf("https://%s/burrow", viper.GetString("server"))
-//	wsURL = fmt.Sprintf("wss://%s/burrow", viper.GetString("server"))
-//
-// )
 var httpClient *resty.Client = resty.New().SetHeader("User-Agent", "Burrow 0.1")
 
 var wsMutex sync.Mutex

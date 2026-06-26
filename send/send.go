@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	MaxBufferThreshold = 1024 * 1024 // 1MB
-	LowBufferThreshold = 512 * 1024  // 512KB
+	MaxBufferThreshold = 4 * 1024 * 1024 // 4MB
+	LowBufferThreshold = 2 * 1024 * 1024 // 2MB
+	MaxSafeChunkSize   = 65535 // almost 64kb, but not rly
+	progressInterval   = 500 * time.Millisecond
 )
 
 var ChunkSize int
@@ -27,6 +29,9 @@ type FileMetadata struct {
 
 func HandleFileSend(dc *webrtc.DataChannel, filePath string) {
 	ChunkSize = viper.GetInt("chunkSize")
+	if ChunkSize > MaxSafeChunkSize {
+		ChunkSize = MaxSafeChunkSize
+	}
 	fmt.Printf("Data channel open, starting transfer of: %s\n", filePath)
 
 	file, err := os.Open(filePath)
@@ -53,23 +58,29 @@ func HandleFileSend(dc *webrtc.DataChannel, filePath string) {
 		return
 	}
 
-	resumeChan := make(chan struct{})
-
+	resumeChan := make(chan struct{}, 1)
 	dc.SetBufferedAmountLowThreshold(LowBufferThreshold)
 	dc.OnBufferedAmountLow(func() {
 		select {
 		case resumeChan <- struct{}{}:
 		default:
-			// avoid blocking
 		}
 	})
 
 	buffer := make([]byte, ChunkSize)
 	startTime := time.Now()
 	var totalSent int64
+	lastPrint := time.Now()
+
+	printProgress := func() {
+		percentage := (float64(totalSent) / float64(meta.Size)) * 100
+		fmt.Printf("\r[*] Sending: %.2f%% (%.2f / %.2f MB)",
+			percentage, float64(totalSent)/(1024*1024), float64(meta.Size)/(1024*1024))
+	}
+
 	for {
 		if dc.BufferedAmount() > MaxBufferThreshold {
-			<-resumeChan // block until buffered amount drops
+			<-resumeChan
 		}
 
 		n, err := file.Read(buffer)
@@ -79,11 +90,14 @@ func HandleFileSend(dc *webrtc.DataChannel, filePath string) {
 				return
 			}
 			totalSent += int64(n)
-			percentage := (float64(totalSent) / float64(meta.Size)) * 100
-			fmt.Printf("\r[*] Sending: %.2f%% (%.2f / %.2f MB)",
-				percentage, float64(totalSent)/(1024*1024), float64(meta.Size)/(1024*1024))
+
+			if time.Since(lastPrint) > progressInterval {
+				printProgress()
+				lastPrint = time.Now()
+			}
 		}
 		if err == io.EOF {
+			printProgress()
 			break
 		}
 	}

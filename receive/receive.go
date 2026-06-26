@@ -7,9 +7,12 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/pion/webrtc/v3"
 )
+
+const progressInterval = 500 * time.Millisecond
 
 type FileMetadata struct {
 	Name string `json:"name"`
@@ -24,6 +27,14 @@ func HandleFileReceive(dc *webrtc.DataChannel, targetDir string) {
 	var meta FileMetadata
 	var totalReceived int64
 	initialized := false
+	lastPrint := time.Now()
+
+	printProgress := func() {
+		percentage := (float64(totalReceived) / float64(meta.Size)) * 100
+		fmt.Printf("\r[*] Downloading: %.2f%% (%.2f / %.2f MB)",
+			percentage, float64(totalReceived)/(1024*1024), float64(meta.Size)/(1024*1024))
+	}
+
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
 		if msg.IsString {
 			textCmd := string(msg.Data)
@@ -49,11 +60,10 @@ func HandleFileReceive(dc *webrtc.DataChannel, targetDir string) {
 				if err != nil {
 					log.Fatalf("[!] Failed to create local file: %v", err)
 				}
-				bufferedWriter = bufio.NewWriterSize(file, 1024*1024) // 1MB buffer
+				bufferedWriter = bufio.NewWriterSize(file, 1024*1024)
 				initialized = true
 				fmt.Printf("[*] Receiving File: %s (Total Size: %.2f MB)\n", meta.Name, float64(meta.Size)/(1024*1024))
 				return
-
 			}
 		}
 
@@ -65,9 +75,10 @@ func HandleFileReceive(dc *webrtc.DataChannel, targetDir string) {
 			}
 
 			totalReceived += int64(n)
-			percentage := (float64(totalReceived) / float64(meta.Size)) * 100
-			fmt.Printf("\r[*] Downloading: %.2f%% (%.2f / %.2f MB)",
-				percentage, float64(totalReceived)/(1024*1024), float64(meta.Size)/(1024*1024))
+			if time.Since(lastPrint) > progressInterval {
+				printProgress()
+				lastPrint = time.Now()
+			}
 		}
 	})
 }

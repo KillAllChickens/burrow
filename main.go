@@ -56,7 +56,7 @@ func main() {
 			code := args[0]
 			outputDir, _ := cmd.Flags().GetString("output")
 			if outputDir == "" {
-				outputDir = "." // Fallback to current working directory
+				outputDir = "."
 			}
 
 			onChannelOpen := func(dc *webrtc.DataChannel) {

@@ -11,7 +11,7 @@ import (
 func InitConfig() {
 	viper.SetDefault("server", "api.killallchickens.org")
 	viper.SetDefault("stun", "stun:stun.l.google.com:19302")
-	viper.SetDefault("chunkSize", 64*1024) // 64KB
+	viper.SetDefault("chunkSize", 65535)
 
 
 	var appConfigDir string
