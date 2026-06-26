@@ -7,12 +7,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/pion/webrtc/v3"
+	"github.com/schollz/progressbar/v3"
 )
-
-const progressInterval = 500 * time.Millisecond
 
 type FileMetadata struct {
 	Name string `json:"name"`
@@ -27,13 +25,7 @@ func HandleFileReceive(dc *webrtc.DataChannel, targetDir string) {
 	var meta FileMetadata
 	var totalReceived int64
 	initialized := false
-	lastPrint := time.Now()
-
-	printProgress := func() {
-		percentage := (float64(totalReceived) / float64(meta.Size)) * 100
-		fmt.Printf("\r[*] Downloading: %.2f%% (%.2f / %.2f MB)",
-			percentage, float64(totalReceived)/(1024*1024), float64(meta.Size)/(1024*1024))
-	}
+	var bar *progressbar.ProgressBar
 
 	dc.OnMessage(func(msg webrtc.DataChannelMessage) {
 		if msg.IsString {
@@ -44,6 +36,9 @@ func HandleFileReceive(dc *webrtc.DataChannel, targetDir string) {
 				}
 				if file != nil {
 					file.Close()
+				}
+				if bar != nil {
+					bar.Finish()
 				}
 				fmt.Println("\n[*] File download completed successfully!")
 				os.Exit(0)
@@ -61,8 +56,15 @@ func HandleFileReceive(dc *webrtc.DataChannel, targetDir string) {
 					log.Fatalf("[!] Failed to create local file: %v", err)
 				}
 				bufferedWriter = bufio.NewWriterSize(file, 1024*1024)
+				bar = progressbar.NewOptions64(meta.Size,
+					progressbar.OptionSetDescription("Downloading"),
+					progressbar.OptionSetWidth(40),
+					progressbar.OptionShowBytes(true),
+					progressbar.OptionShowCount(),
+					progressbar.OptionSetPredictTime(true),
+					progressbar.OptionSetRenderBlankState(true),
+				)
 				initialized = true
-				fmt.Printf("[*] Receiving File: %s (Total Size: %.2f MB)\n", meta.Name, float64(meta.Size)/(1024*1024))
 				return
 			}
 		}
@@ -73,12 +75,8 @@ func HandleFileReceive(dc *webrtc.DataChannel, targetDir string) {
 				log.Printf("[!] Disk write error: %v", err)
 				return
 			}
-
 			totalReceived += int64(n)
-			if time.Since(lastPrint) > progressInterval {
-				printProgress()
-				lastPrint = time.Now()
-			}
+			bar.Add(n)
 		}
 	})
 }

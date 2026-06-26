@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"github.com/pion/webrtc/v3"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/viper"
 )
 
 const (
-	MaxBufferThreshold = 4 * 1024 * 1024 // 4MB
-	LowBufferThreshold = 2 * 1024 * 1024 // 2MB
-	MaxSafeChunkSize   = 65535 // almost 64kb, but not rly
-	progressInterval   = 500 * time.Millisecond
+	MaxBufferThreshold = 4 * 1024 * 1024
+	LowBufferThreshold = 2 * 1024 * 1024
+	MaxSafeChunkSize   = 65535
 )
 
 var ChunkSize int
@@ -67,16 +67,18 @@ func HandleFileSend(dc *webrtc.DataChannel, filePath string) {
 		}
 	})
 
+	bar := progressbar.NewOptions64(meta.Size,
+		progressbar.OptionSetDescription("Sending"),
+		progressbar.OptionSetWidth(40),
+		progressbar.OptionShowBytes(true),
+		progressbar.OptionShowCount(),
+		progressbar.OptionSetPredictTime(true),
+		progressbar.OptionSetRenderBlankState(true),
+	)
+
 	buffer := make([]byte, ChunkSize)
 	startTime := time.Now()
 	var totalSent int64
-	lastPrint := time.Now()
-
-	printProgress := func() {
-		percentage := (float64(totalSent) / float64(meta.Size)) * 100
-		fmt.Printf("\r[*] Sending: %.2f%% (%.2f / %.2f MB)",
-			percentage, float64(totalSent)/(1024*1024), float64(meta.Size)/(1024*1024))
-	}
 
 	for {
 		if dc.BufferedAmount() > MaxBufferThreshold {
@@ -90,17 +92,13 @@ func HandleFileSend(dc *webrtc.DataChannel, filePath string) {
 				return
 			}
 			totalSent += int64(n)
-
-			if time.Since(lastPrint) > progressInterval {
-				printProgress()
-				lastPrint = time.Now()
-			}
+			bar.Add(n)
 		}
 		if err == io.EOF {
-			printProgress()
 			break
 		}
 	}
+	bar.Finish()
 	duration := time.Since(startTime)
 	fmt.Printf("\n[*] Finished! Sent %.2f MB in %v (Avg: %.2f MB/s)\n",
 		float64(totalSent)/(1024*1024), duration, (float64(totalSent)/(1024*1024))/duration.Seconds())
