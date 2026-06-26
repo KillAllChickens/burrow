@@ -70,9 +70,6 @@ func main() {
 	startCmd.Flags().StringP("file", "f", "", "The file to share (Required)")
 	joinCmd.Flags().StringP("output", "o", "", "The directory directory to save the file in (defaults to current dir)")
 
-	rootCmd.PersistentFlags().IntP("port", "p", 0, "The port to run on")
-	rootCmd.PersistentFlags().StringP("server", "s", "", "The port to run on")
-
 	viper.BindPFlag("port", rootCmd.PersistentFlags().Lookup("port"))
 	viper.BindPFlag("server", rootCmd.PersistentFlags().Lookup("server"))
 

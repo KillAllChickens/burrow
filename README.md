@@ -5,23 +5,18 @@ Peer-to-peer encrypted file sharing over WebRTC.
 ## Install
 
 ```sh
-go install
+go build -o burrow .
 ```
 
 ## Usage
 
-**Sender:** share a file and get a session code.
+Sender:
 
 ```sh
 burrow start -f myfile.txt
 ```
-```
-[*] Initializing file sharing server...
-[*] Session Created! Code: <CODE>
-[*] Waiting for peer to join...
-```
 
-**Receiver:** use that session code from above to download the file.
+Receiver:
 
 ```sh
 burrow join <code> -o ~/Downloads
@@ -29,18 +24,22 @@ burrow join <code> -o ~/Downloads
 
 ## Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `-p, --port` | `9182` | Signaling server port |
-| `-s, --server` | `api.killallchickens.org` | Signaling server |
-| `-f, --file` | | File to share (start) |
-| `-o, --output` | `.` | Output directory (join) |
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-f, --file` | File to share (start) | |
+| `-o, --output` | Output directory (join) | `.` |
+
+The default signaling server is `api.killallchickens.org`, a public instance that is always online. You can also self-host your own signaling server and point to it with the config.
 
 ## Config
 
-Settings can be set in `~/.config/burrow/config.yaml` or via `BURR_*` env vars (e.g. `BURR_SERVER`, `BURR_PORT`, `BURR_STUN`, `BURR_CHUNKSIZE`).  
+Settings are loaded from `~/.config/burrow/config.yaml` or `BURR_*` env vars. Default config:
 
-A public server will always be available if you set your server to `api.killallchickens.org`
+```yaml
+chunkSize: 65536
+server: api.killallchickens.org
+stun: stun:stun.l.google.com:19302
+```
 
 ## How it works
 
@@ -50,4 +49,4 @@ A public server will always be available if you set your server to `api.killallc
 4. A direct WebRTC data channel opens between peers.
 5. File is streamed in encrypted 64 KB chunks with flow control.
 
-The file transfer is encrypted end-to-end via WebRTC's mandatory DTLS/SRTP.
+The file transfer is encrypted end-to-end via WebRTC's mandatory DTLS.
