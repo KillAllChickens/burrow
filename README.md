@@ -5,22 +5,36 @@ Peer-to-peer encrypted file sharing over WebRTC.
 ## Install
 
 ```sh
-go build -o burrow .
+git clone https://github.com/KillAllChickens/burrow
+cd burrow
+go install .
 ```
 
 ## Usage
 
-Sender:
+Sender - share a file:
 
 ```sh
 burrow start -f myfile.txt
 ```
 
-Receiver:
+This prints a session code:
+
+```
+[*] Initializing file sharing server...
+[*] Session Created! Code: 452996
+[*] Waiting for peer to join...
+```
+
+Once a receiver joins with the code, the file transfers immediately.
+
+Receiver - download a file:
 
 ```sh
-burrow join <code> -o ~/Downloads
+burrow join 452996 -o ~/Downloads
 ```
+
+The file is saved to the output directory with its original filename.
 
 ## Flags
 
