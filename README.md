@@ -29,8 +29,6 @@ burrow join <code> -o ~/Downloads
 | `-f, --file` | File to share (start) | |
 | `-o, --output` | Output directory (join) | `.` |
 
-The default signaling server is `api.killallchickens.org`, a public instance that is always online. You can also self-host your own signaling server and point to it with the config.
-
 ## Config
 
 Settings are loaded from `~/.config/burrow/config.yaml` or `BURR_*` env vars. Default config:
@@ -40,6 +38,7 @@ chunkSize: 65536
 server: api.killallchickens.org
 stun: stun:stun.l.google.com:19302
 ```
+The default signaling server is `api.killallchickens.org`, a public instance that is always online. You can also self-host your own signaling server and point to it with the config.
 
 ## How it works
 
