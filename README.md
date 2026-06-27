@@ -7,7 +7,7 @@ Peer-to-peer encrypted file sharing over WebRTC.
 ```sh
 git clone https://github.com/KillAllChickens/burrow
 cd burrow
-go install .
+./install.sh
 ```
 
 ## Usage
