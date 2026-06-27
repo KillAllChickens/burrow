@@ -51,24 +51,23 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{viper.GetString("stun")}},
-
 			{
-				URLs:       []string{"turn:openrelay.metered.ca:80", "turn:openrelay.metered.ca:443"},
+				// Added "?transport=tcp" to forcefully bypass UDP firewalls
+				URLs: []string{
+					"turn:openrelay.metered.ca:80?transport=tcp",
+					"turn:openrelay.metered.ca:443?transport=tcp",
+				},
 				Username:   "openrelayproject",
 				Credential: "openrelayproject",
 			},
 		},
-
-		// If testing across different networks fails, you NEED to add a TURN server here:
-		// {URLs: []string{"turn:your-turn-server.com:3478"}, Username: "user", Credential: "password"},
 	}
 
 	settingEngine := webrtc.SettingEngine{}
 	settingEngine.SetNetworkTypes([]webrtc.NetworkType{
 		webrtc.NetworkTypeUDP4,
-		webrtc.NetworkTypeTCP4, // Pion supports ICE-TCP as a fallback
+		webrtc.NetworkTypeTCP4, // Required for TCP TURN fallback
 	})
-
 	settingEngine.LoggerFactory = &logging.DefaultLoggerFactory{
 		DefaultLogLevel: logging.LogLevelDebug,
 		ScopeLevels: map[string]logging.LogLevel{
@@ -79,9 +78,6 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 		Writer: os.Stderr,
 	}
 	settingEngine.SetIncludeLoopbackCandidate(false)
-
-	// REMOVED SetInterfaceFilter to prevent empty candidate lists on the offering machine.
-	// WebRTC is designed to safely handle multiple interfaces automatically.
 
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 
@@ -155,6 +151,8 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 				var sdp webrtc.SessionDescription
 				json.Unmarshal(msgBytes, &sdp)
 
+				log.Printf("[*] SUCCESS: Received remote %s from signaling server!", msgType)
+
 				if err := pc.SetRemoteDescription(sdp); err != nil {
 					log.Printf("[!] SetRemoteDescription failed: %v", err)
 					continue
@@ -174,10 +172,9 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 							return
 						}
 
-						// Wait for ICE gathering to completely finish
 						<-gatherComplete
 
-						// Send the Answer containing all ICE candidates
+						log.Printf("[*] Sending Answer to peer...")
 						session.writeWS(*pc.LocalDescription())
 					}()
 				}
@@ -185,7 +182,7 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 		}
 	}()
 
-	select {} // Block forever
+	select {}
 }
 
 func (s *PeerSession) handleRole(role string, onChannelOpen func(dc *webrtc.DataChannel)) {
@@ -208,10 +205,9 @@ func (s *PeerSession) handleRole(role string, onChannelOpen func(dc *webrtc.Data
 				return
 			}
 
-			// Wait for ICE gathering to completely finish
 			<-gatherComplete
 
-			// Send the Offer containing all ICE candidates
+			log.Printf("[*] Sending Offer to peer...")
 			s.writeWS(*s.pc.LocalDescription())
 		}()
 	} else {
