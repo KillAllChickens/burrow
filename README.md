@@ -48,11 +48,11 @@ The file is saved to the output directory with its original filename.
 Settings are loaded from `~/.config/burrow/config.yaml` or `BURR_*` env vars. Default config:
 
 ```yaml
-chunkSize: 65536
+chunkSize: 65535
 server: api.killallchickens.org
 stun: stun:stun.l.google.com:19302
 ```
-The default signaling server is `api.killallchickens.org`, a public instance that is always online. You can also self-host your own signaling server and point to it with the config.
+The default signaling server is `api.killallchickens.org`, a public instance that is always online. You can also [self-host your own signaling server](https://github.com/KillAllChickens/burrow-server), and point to it with the config.
 
 ## How it works
 
