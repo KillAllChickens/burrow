@@ -111,11 +111,11 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 		}
 	})
 
-	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
-		if c != nil {
-			session.writeWS(c.ToJSON())
-		}
-	})
+	// pc.OnICECandidate(func(c *webrtc.ICECandidate) {
+	// 	if c != nil {
+	// 		session.writeWS(c.ToJSON())
+	// 	}
+	// })
 
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		fmt.Printf("[*] P2P State changed: %s\n", state.String())
