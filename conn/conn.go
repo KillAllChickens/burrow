@@ -49,7 +49,16 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 	}
 
 	config := webrtc.Configuration{
-		ICEServers: []webrtc.ICEServer{{URLs: []string{viper.GetString("stun")}}},
+		ICEServers: []webrtc.ICEServer{
+			{URLs: []string{viper.GetString("stun")}},
+
+			{
+				URLs:       []string{"turn:openrelay.metered.ca:80", "turn:openrelay.metered.ca:443"},
+				Username:   "openrelayproject",
+				Credential: "openrelayproject",
+			},
+		},
+
 		// If testing across different networks fails, you NEED to add a TURN server here:
 		// {URLs: []string{"turn:your-turn-server.com:3478"}, Username: "user", Credential: "password"},
 	}
