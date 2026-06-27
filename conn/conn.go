@@ -51,15 +51,15 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{viper.GetString("stun")}},
-			{
-				// Added "?transport=tcp" to forcefully bypass UDP firewalls
-				URLs: []string{
-					"turn:openrelay.metered.ca:80?transport=tcp",
-					"turn:openrelay.metered.ca:443?transport=tcp",
-				},
-				Username:   "openrelayproject",
-				Credential: "openrelayproject",
-			},
+			// {
+			// 	// Added "?transport=tcp" to forcefully bypass UDP firewalls
+			// 	URLs: []string{
+			// 		"turn:openrelay.metered.ca:80?transport=tcp",
+			// 		"turn:openrelay.metered.ca:443?transport=tcp",
+			// 	},
+			// 	Username:   "openrelayproject",
+			// 	Credential: "openrelayproject",
+			// },
 		},
 	}
 
