@@ -75,6 +75,10 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 		log.Fatalf("Failed to create PeerConnection: %v", err)
 	}
 
+	pc.OnICEGatheringStateChange(func(state webrtc.ICEGathererState) {
+		log.Printf("[*] ICE Gathering State: %s", state.String())
+	})
+
 	wsEndpoint := fmt.Sprintf("%s/session/%s/ws", wsURL, code)
 	dialer := websocket.DefaultDialer
 	header := http.Header{}
@@ -92,6 +96,15 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 	}
 
 	session := &PeerSession{pc: pc, ws: ws}
+
+	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
+		if c != nil {
+			log.Printf("[*] Gathered candidate: %s", c.String())
+			session.writeWS(c.ToJSON())
+		} else {
+			log.Printf("[*] ICE gathering complete (nil candidate)")
+		}
+	})
 
 	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
 		if c != nil {
