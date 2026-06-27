@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/pion/logging"
 	"github.com/pion/webrtc/v3"
 	"github.com/spf13/viper"
 	"resty.dev/v3"
@@ -57,6 +58,15 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 		webrtc.NetworkTypeUDP4,
 		webrtc.NetworkTypeTCP4,
 	})
+	settingEngine.LoggerFactory = &logging.DefaultLoggerFactory{
+		DefaultLogLevel: logging.LogLevelDebug,
+		ScopeLevels: map[string]logging.LogLevel{
+			"ice":  logging.LogLevelDebug,
+			"dtls": logging.LogLevelDebug,
+			"sctp": logging.LogLevelDebug,
+		},
+		Writer: os.Stderr,
+	}
 
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 
