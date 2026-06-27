@@ -50,12 +50,16 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{{URLs: []string{viper.GetString("stun")}}},
+		// If testing across different networks fails, you NEED to add a TURN server here:
+		// {URLs: []string{"turn:your-turn-server.com:3478"}, Username: "user", Credential: "password"},
 	}
+
 	settingEngine := webrtc.SettingEngine{}
 	settingEngine.SetNetworkTypes([]webrtc.NetworkType{
 		webrtc.NetworkTypeUDP4,
-		webrtc.NetworkTypeTCP4,
+		webrtc.NetworkTypeTCP4, // Pion supports ICE-TCP as a fallback
 	})
+
 	settingEngine.LoggerFactory = &logging.DefaultLoggerFactory{
 		DefaultLogLevel: logging.LogLevelDebug,
 		ScopeLevels: map[string]logging.LogLevel{
@@ -67,12 +71,8 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 	}
 	settingEngine.SetIncludeLoopbackCandidate(false)
 
-	// NOTE: Ensure viper.GetString("interface") matches the active interface
-	// on BOTH the offering machine and the answering machine, otherwise gathering will fail.
-	settingEngine.SetInterfaceFilter(func(iface string) bool {
-		log.Printf("[*] ICE considering interface: %s", iface)
-		return iface == viper.GetString("interface")
-	})
+	// REMOVED SetInterfaceFilter to prevent empty candidate lists on the offering machine.
+	// WebRTC is designed to safely handle multiple interfaces automatically.
 
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 
@@ -88,7 +88,6 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 	wsEndpoint := fmt.Sprintf("%s/session/%s/ws", wsURL, code)
 	dialer := websocket.DefaultDialer
 	header := http.Header{}
-
 	header.Add("Origin", "https://"+viper.GetString("server"))
 	header.Add("User-Agent", "Burrow 0.1")
 
@@ -102,13 +101,9 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 
 	session := &PeerSession{pc: pc, ws: ws}
 
-	// We no longer send Trickle ICE candidates over the WebSocket here.
-	// Instead, we wait for gathering to finish and send the SDP with all candidates baked in.
 	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
 		if c != nil {
 			log.Printf("[*] Gathered candidate locally: %s", c.String())
-		} else {
-			log.Printf("[*] ICE gathering complete (nil candidate)")
 		}
 	})
 
@@ -150,6 +145,7 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 			if msgType, ok := raw["type"].(string); ok && (msgType == "offer" || msgType == "answer") {
 				var sdp webrtc.SessionDescription
 				json.Unmarshal(msgBytes, &sdp)
+
 				if err := pc.SetRemoteDescription(sdp); err != nil {
 					log.Printf("[!] SetRemoteDescription failed: %v", err)
 					continue
@@ -162,26 +158,20 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 						continue
 					}
 
-					// Spawn a goroutine to prevent blocking the WebSocket read loop
 					go func() {
 						gatherComplete := webrtc.GatheringCompletePromise(pc)
-						pc.SetLocalDescription(answer)
+						if err := pc.SetLocalDescription(answer); err != nil {
+							log.Printf("[!] SetLocalDescription failed: %v", err)
+							return
+						}
 
-						// Block until ICE gathering is completely finished
+						// Wait for ICE gathering to completely finish
 						<-gatherComplete
 
 						// Send the Answer containing all ICE candidates
 						session.writeWS(*pc.LocalDescription())
 					}()
 				}
-			}
-
-			// Left intact just in case the remote peer decides to trickle anyway
-			if _, ok := raw["candidate"]; ok {
-				var candidate webrtc.ICECandidateInit
-				json.Unmarshal(msgBytes, &candidate)
-				log.Printf("[*] Received remote trickle candidate: %s", candidate.Candidate)
-				pc.AddICECandidate(candidate)
 			}
 		}
 	}()
@@ -202,12 +192,14 @@ func (s *PeerSession) handleRole(role string, onChannelOpen func(dc *webrtc.Data
 			log.Fatalf("Failed to create offer: %v", err)
 		}
 
-		// Spawn a goroutine to wait for gathering completion before sending
 		go func() {
 			gatherComplete := webrtc.GatheringCompletePromise(s.pc)
-			s.pc.SetLocalDescription(offer)
+			if err := s.pc.SetLocalDescription(offer); err != nil {
+				log.Printf("[!] SetLocalDescription failed: %v", err)
+				return
+			}
 
-			// Block until ICE gathering is completely finished
+			// Wait for ICE gathering to completely finish
 			<-gatherComplete
 
 			// Send the Offer containing all ICE candidates

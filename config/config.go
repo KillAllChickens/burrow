@@ -11,7 +11,6 @@ import (
 func InitConfig() {
 	viper.SetDefault("server", "api.killallchickens.org")
 	viper.SetDefault("stun", "stun:stun.l.google.com:19302")
-	viper.SetDefault("interface", "wlan0")
 	viper.SetDefault("chunkSize", 65535)
 
 
