@@ -17,8 +17,6 @@ import (
 
 var httpClient *resty.Client = resty.New().SetHeader("User-Agent", "Burrow 0.1")
 
-var wsMutex sync.Mutex
-
 type PeerSession struct {
 	pc      *webrtc.PeerConnection
 	ws      *websocket.Conn
@@ -68,6 +66,9 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 		Writer: os.Stderr,
 	}
 	settingEngine.SetIncludeLoopbackCandidate(false)
+
+	// NOTE: Ensure viper.GetString("interface") matches the active interface
+	// on BOTH the offering machine and the answering machine, otherwise gathering will fail.
 	settingEngine.SetInterfaceFilter(func(iface string) bool {
 		log.Printf("[*] ICE considering interface: %s", iface)
 		return iface == viper.GetString("interface")
@@ -89,7 +90,6 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 	header := http.Header{}
 
 	header.Add("Origin", "https://"+viper.GetString("server"))
-
 	header.Add("User-Agent", "Burrow 0.1")
 
 	ws, resp, err := dialer.Dial(wsEndpoint, header)
@@ -102,20 +102,15 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 
 	session := &PeerSession{pc: pc, ws: ws}
 
+	// We no longer send Trickle ICE candidates over the WebSocket here.
+	// Instead, we wait for gathering to finish and send the SDP with all candidates baked in.
 	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
 		if c != nil {
-			log.Printf("[*] Gathered candidate: %s", c.String())
-			session.writeWS(c.ToJSON())
+			log.Printf("[*] Gathered candidate locally: %s", c.String())
 		} else {
 			log.Printf("[*] ICE gathering complete (nil candidate)")
 		}
 	})
-
-	// pc.OnICECandidate(func(c *webrtc.ICECandidate) {
-	// 	if c != nil {
-	// 		session.writeWS(c.ToJSON())
-	// 	}
-	// })
 
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		fmt.Printf("[*] P2P State changed: %s\n", state.String())
@@ -159,26 +154,39 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 					log.Printf("[!] SetRemoteDescription failed: %v", err)
 					continue
 				}
+
 				if msgType == "offer" {
 					answer, err := pc.CreateAnswer(nil)
 					if err != nil {
 						log.Printf("[!] CreateAnswer failed: %v", err)
 						continue
 					}
-					pc.SetLocalDescription(answer)
-					session.writeWS(answer)
+
+					// Spawn a goroutine to prevent blocking the WebSocket read loop
+					go func() {
+						gatherComplete := webrtc.GatheringCompletePromise(pc)
+						pc.SetLocalDescription(answer)
+
+						// Block until ICE gathering is completely finished
+						<-gatherComplete
+
+						// Send the Answer containing all ICE candidates
+						session.writeWS(*pc.LocalDescription())
+					}()
 				}
 			}
+
+			// Left intact just in case the remote peer decides to trickle anyway
 			if _, ok := raw["candidate"]; ok {
 				var candidate webrtc.ICECandidateInit
 				json.Unmarshal(msgBytes, &candidate)
-				log.Printf("[*] Received remote candidate: %s", candidate.Candidate)
+				log.Printf("[*] Received remote trickle candidate: %s", candidate.Candidate)
 				pc.AddICECandidate(candidate)
 			}
 		}
 	}()
 
-	select {}
+	select {} // Block forever
 }
 
 func (s *PeerSession) handleRole(role string, onChannelOpen func(dc *webrtc.DataChannel)) {
@@ -189,9 +197,22 @@ func (s *PeerSession) handleRole(role string, onChannelOpen func(dc *webrtc.Data
 		}
 		dc.OnOpen(func() { onChannelOpen(dc) })
 
-		offer, _ := s.pc.CreateOffer(nil)
-		s.pc.SetLocalDescription(offer)
-		s.writeWS(offer)
+		offer, err := s.pc.CreateOffer(nil)
+		if err != nil {
+			log.Fatalf("Failed to create offer: %v", err)
+		}
+
+		// Spawn a goroutine to wait for gathering completion before sending
+		go func() {
+			gatherComplete := webrtc.GatheringCompletePromise(s.pc)
+			s.pc.SetLocalDescription(offer)
+
+			// Block until ICE gathering is completely finished
+			<-gatherComplete
+
+			// Send the Offer containing all ICE candidates
+			s.writeWS(*s.pc.LocalDescription())
+		}()
 	} else {
 		s.pc.OnDataChannel(func(dc *webrtc.DataChannel) {
 			dc.OnOpen(func() { onChannelOpen(dc) })
