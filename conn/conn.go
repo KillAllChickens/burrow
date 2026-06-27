@@ -52,8 +52,15 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{{URLs: []string{viper.GetString("stun")}}},
 	}
+	settingEngine := webrtc.SettingEngine{}
+	settingEngine.SetNetworkTypes([]webrtc.NetworkType{
+		webrtc.NetworkTypeUDP4,
+		webrtc.NetworkTypeTCP4,
+	})
 
-	pc, err := webrtc.NewPeerConnection(config)
+	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
+
+	pc, err := api.NewPeerConnection(config)
 	if err != nil {
 		log.Fatalf("Failed to create PeerConnection: %v", err)
 	}
