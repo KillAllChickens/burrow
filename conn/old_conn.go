@@ -51,13 +51,22 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 	config := webrtc.Configuration{
 		ICEServers: []webrtc.ICEServer{
 			{URLs: []string{viper.GetString("stun")}},
+			// {
+			// 	// Added "?transport=tcp" to forcefully bypass UDP firewalls
+			// 	URLs: []string{
+			// 		"turn:openrelay.metered.ca:80?transport=tcp",
+			// 		"turn:openrelay.metered.ca:443?transport=tcp",
+			// 	},
+			// 	Username:   "openrelayproject",
+			// 	Credential: "openrelayproject",
+			// },
 		},
 	}
 
 	settingEngine := webrtc.SettingEngine{}
 	settingEngine.SetNetworkTypes([]webrtc.NetworkType{
 		webrtc.NetworkTypeUDP4,
-		webrtc.NetworkTypeTCP4,
+		webrtc.NetworkTypeTCP4, // Required for TCP TURN fallback
 	})
 	settingEngine.LoggerFactory = &logging.DefaultLoggerFactory{
 		DefaultLogLevel: logging.LogLevelDebug,
@@ -69,18 +78,6 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 		Writer: os.Stderr,
 	}
 	settingEngine.SetIncludeLoopbackCandidate(false)
-
-	// If port_forward is enabled in config, bind to port 50000 only.
-	// This means pion will advertise your-public-ip:50000 as a candidate,
-	// which matches the port forward rule on your router.
-	// Users without port forwarding leave this unset and pion picks a random
-	// ephemeral port — which works fine for anyone on Cone NAT.
-	if viper.GetBool("port_forward") {
-		if err := settingEngine.SetEphemeralUDPPortRange(50000, 50000); err != nil {
-			log.Fatalf("Failed to set UDP port range: %v", err)
-		}
-		log.Printf("[*] Port forwarding mode enabled: binding to UDP 50000")
-	}
 
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 
@@ -121,13 +118,8 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 			ws.Close()
 			return
 		}
-		if state == webrtc.PeerConnectionStateFailed {
-			fmt.Println("[!] Connection failed. This is likely due to Symmetric NAT on one or both ends.")
-			fmt.Println("[!] Workarounds: forward UDP port 50000 on your router, or use a VPN like Tailscale.")
-			os.Exit(1)
-		}
-		if state == webrtc.PeerConnectionStateClosed {
-			fmt.Println("Connection closed. Exiting.")
+		if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateClosed {
+			fmt.Println("Connection lost. Exiting.")
 			os.Exit(0)
 		}
 	})

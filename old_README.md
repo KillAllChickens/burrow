@@ -54,18 +54,6 @@ stun: stun:stun.l.google.com:19302
 ```
 The default signaling server is `api.killallchickens.org`, a public instance that is always online. You can also [self-host your own signaling server](https://github.com/KillAllChickens/burrow-server), and point to it with the config.
 
-## Connection failures & NAT
-
-Burrow is fully peer-to-peer with no relay servers. Most home routers work fine with no setup. However, roughly 20–30% of connections fail due to Symmetric NAT — common with ISP-provided routers, office networks, and universities — which makes direct P2P connections impossible.
-
-If your connection fails, the fix is to forward UDP port `50000` to your machine on your router, then add this to `~/.config/burrow/config.yaml`:
-
-```yaml
-port_forward: true
-```
-
-Only one side needs to do this for the connection to succeed. If you can't port forward, connecting over a VPN (e.g. Tailscale) also works.
-
 ## How it works
 
 1. Sender creates a session on the signaling server and gets a code.
