@@ -155,10 +155,16 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 			if msgType, ok := raw["type"].(string); ok && (msgType == "offer" || msgType == "answer") {
 				var sdp webrtc.SessionDescription
 				json.Unmarshal(msgBytes, &sdp)
-				pc.SetRemoteDescription(sdp)
-
+				if err := pc.SetRemoteDescription(sdp); err != nil {
+					log.Printf("[!] SetRemoteDescription failed: %v", err)
+					continue
+				}
 				if msgType == "offer" {
-					answer, _ := pc.CreateAnswer(nil)
+					answer, err := pc.CreateAnswer(nil)
+					if err != nil {
+						log.Printf("[!] CreateAnswer failed: %v", err)
+						continue
+					}
 					pc.SetLocalDescription(answer)
 					session.writeWS(answer)
 				}
@@ -166,6 +172,7 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 			if _, ok := raw["candidate"]; ok {
 				var candidate webrtc.ICECandidateInit
 				json.Unmarshal(msgBytes, &candidate)
+				log.Printf("[*] Received remote candidate: %s", candidate.Candidate)
 				pc.AddICECandidate(candidate)
 			}
 		}
