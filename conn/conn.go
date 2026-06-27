@@ -67,6 +67,11 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 		},
 		Writer: os.Stderr,
 	}
+	settingEngine.SetIncludeLoopbackCandidate(false)
+	settingEngine.SetInterfaceFilter(func(iface string) bool {
+		log.Printf("[*] ICE considering interface: %s", iface)
+		return iface == viper.GetString("interface")
+	})
 
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
 
