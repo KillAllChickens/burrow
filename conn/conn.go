@@ -76,10 +76,18 @@ func Initialize(create bool, code string, onChannelOpen func(dc *webrtc.DataChan
 	// Users without port forwarding leave this unset and pion picks a random
 	// ephemeral port — which works fine for anyone on Cone NAT.
 	if viper.GetBool("port_forward") {
-		if err := settingEngine.SetEphemeralUDPPortRange(50000, 50000); err != nil {
-			log.Fatalf("Failed to set UDP port range: %v", err)
-		}
-		log.Printf("[*] Port forwarding mode enabled: binding to UDP 50000")
+    if err := settingEngine.SetEphemeralUDPPortRange(50000, 50005); err != nil {
+        log.Fatalf("Failed to set UDP port range: %v", err)
+    }
+    // Filter to configured interface to avoid port conflicts across interfaces
+    if iface := viper.GetString("interface"); iface != "" {
+        settingEngine.SetInterfaceFilter(func(i string) bool {
+            return i == iface
+        })
+        log.Printf("[*] Port forwarding mode enabled: binding to UDP 50000-50005 on %s", iface)
+    } else {
+        log.Printf("[*] Port forwarding mode enabled: binding to UDP 50000-50005")
+    }
 	}
 
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(settingEngine))
